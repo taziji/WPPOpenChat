@@ -32,8 +32,9 @@ const attachments = new Map();
 const waiters = new Set();
 const LONG_POLL_TIMEOUT_MS = 25000;
 
-function buildAttachmentUrl(id) {
-  return `/v1/attachments/${id}`;
+function buildAttachmentUrl(id, filename = 'file') {
+  const safeName = encodeURIComponent(filename);
+  return `/v1/attachments/${id}/${safeName}`;
 }
 
 function storeAttachment({ filename = 'file', mime = 'application/octet-stream', buffer }) {
@@ -52,7 +53,7 @@ function storeAttachment({ filename = 'file', mime = 'application/octet-stream',
     filename,
     mime,
     size: entry.size,
-    url: buildAttachmentUrl(id)
+    url: buildAttachmentUrl(id, filename)
   };
 }
 
@@ -73,7 +74,7 @@ function normalizeAttachment(att = {}) {
       filename: att.filename || entry.filename,
       mime: att.mime || entry.mime,
       size: entry.size,
-      url: buildAttachmentUrl(entry.id)
+      url: buildAttachmentUrl(entry.id, entry.filename)
     };
   }
 
@@ -186,7 +187,7 @@ app.post('/v1/attachments/upload', upload.single('file'), (req, res) => {
   res.json({ ok: true, attachment: desc });
 });
 
-app.get('/v1/attachments/:id', (req, res) => {
+app.get('/v1/attachments/:id/:name?', (req, res) => {
   const id = Number(req.params.id);
   const entry = attachments.get(id);
   if (!entry) {

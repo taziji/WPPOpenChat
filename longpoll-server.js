@@ -3,8 +3,8 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-const PORT = 7080;
-const HOST = '127.0.0.1';
+const PORT = Number(process.env.PORT || 7080);
+const HOST = process.env.HOST || '0.0.0.0';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +32,10 @@ const attachments = new Map();
 const waiters = new Set();
 const LONG_POLL_TIMEOUT_MS = 25000;
 
+function buildAttachmentUrl(id) {
+  return `/v1/attachments/${id}`;
+}
+
 function storeAttachment({ filename = 'file', mime = 'application/octet-stream', buffer }) {
   const id = nextAttachmentId++;
   const entry = {
@@ -48,7 +52,7 @@ function storeAttachment({ filename = 'file', mime = 'application/octet-stream',
     filename,
     mime,
     size: entry.size,
-    url: `http://${HOST}:${PORT}/v1/attachments/${id}`
+    url: buildAttachmentUrl(id)
   };
 }
 
@@ -69,7 +73,7 @@ function normalizeAttachment(att = {}) {
       filename: att.filename || entry.filename,
       mime: att.mime || entry.mime,
       size: entry.size,
-      url: `http://${HOST}:${PORT}/v1/attachments/${entry.id}`
+      url: buildAttachmentUrl(entry.id)
     };
   }
 

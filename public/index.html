@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>WPP Chat 控制台</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: #111827;
+      color: #f9fafb;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      padding: 16px 24px;
+      background: #1f2937;
+      border-bottom: 1px solid #374151;
+    }
+    header h1 {
+      margin: 0;
+      font-size: 20px;
+    }
+    main {
+      flex: 1;
+      display: grid;
+      gap: 24px;
+      padding: 24px;
+      grid-template-columns: minmax(280px, 360px) 1fr;
+    }
+    section {
+      background: #111827;
+      border: 1px solid #374151;
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 10px 20px rgba(15, 23, 42, 0.35);
+    }
+    h2 {
+      margin-top: 0;
+      font-size: 18px;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    label {
+      font-size: 13px;
+      color: #9ca3af;
+    }
+    textarea {
+      min-height: 140px;
+      resize: vertical;
+      padding: 12px;
+      border: 1px solid #374151;
+      border-radius: 8px;
+      background: #0f172a;
+      color: inherit;
+      font: inherit;
+    }
+    input[type="file"] {
+      background: #0f172a;
+      border: 1px dashed #374151;
+      padding: 18px;
+      border-radius: 10px;
+      color: #9ca3af;
+    }
+    button {
+      align-self: flex-end;
+      padding: 10px 18px;
+      border-radius: 12px;
+      background: #2563eb;
+      border: none;
+      color: white;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s ease;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    button:not(:disabled):hover {
+      background: #1d4ed8;
+    }
+    .status {
+      font-size: 13px;
+      color: #9ca3af;
+    }
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      max-height: calc(100vh - 160px);
+      overflow-y: auto;
+    }
+    .card {
+      padding: 16px;
+      border-radius: 12px;
+      background: #0f172a;
+      border: 1px solid #1f2937;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25);
+    }
+    .card h3 {
+      margin: 0 0 8px;
+      font-size: 16px;
+    }
+    .meta {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 10px;
+    }
+    .attachments {
+      margin-top: 8px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .chip {
+      padding: 4px 10px;
+      background: rgba(59, 130, 246, 0.12);
+      border-radius: 999px;
+      font-size: 12px;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 13px;
+      color: #e5e7eb;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>WPP Chat 控制台</h1>
+    <div class="status" id="status">准备就绪</div>
+  </header>
+  <main>
+    <section>
+      <h2>创建新对话</h2>
+      <form id="question-form">
+        <label for="question-text">问题内容</label>
+        <textarea id="question-text" required placeholder="请输入要发送到聊天的提问..."></textarea>
+
+        <label for="file-input">附件（可选，支持多选）</label>
+        <input id="file-input" type="file" multiple />
+
+        <button id="submit-btn" type="submit">发送</button>
+        <div class="status" id="form-status"></div>
+      </form>
+    </section>
+    <section>
+      <h2>对话记录</h2>
+      <div class="list" id="history"></div>
+    </section>
+  </main>
+
+  <script>
+    const form = document.getElementById('question-form');
+    const textarea = document.getElementById('question-text');
+    const fileInput = document.getElementById('file-input');
+    const submitBtn = document.getElementById('submit-btn');
+    const formStatus = document.getElementById('form-status');
+    const historyEl = document.getElementById('history');
+    const statusEl = document.getElementById('status');
+
+    const API_BASE = location.origin;
+    const QUESTION_URL = `${API_BASE}/v1/questions`;
+    const ATTACH_UPLOAD_URL = `${API_BASE}/v1/attachments/upload`;
+    const QUESTIONS_LIST_URL = `${API_BASE}/admin/questions`;
+    const ANSWERS_LIST_URL = `${API_BASE}/admin/answers`;
+
+    async function uploadAttachments(files) {
+      if (!files || !files.length) return [];
+      const results = [];
+      for (const file of files) {
+        const body = new FormData();
+        body.append('file', file);
+        const res = await fetch(ATTACH_UPLOAD_URL, {
+          method: 'POST',
+          body
+        });
+        if (!res.ok) throw new Error('附件上传失败');
+        const data = await res.json();
+        if (!data?.ok) throw new Error(data?.error || '附件上传失败');
+        results.push(data.attachment);
+      }
+      return results;
+    }
+
+    async function submitQuestion(evt) {
+      evt.preventDefault();
+      const text = textarea.value.trim();
+      if (!text) {
+        formStatus.textContent = '请输入问题内容';
+        return;
+      }
+      submitBtn.disabled = true;
+      formStatus.textContent = '上传附件中...';
+
+      try {
+        const attachments = await uploadAttachments(Array.from(fileInput.files || []));
+        formStatus.textContent = '发送问题...';
+
+        const res = await fetch(QUESTION_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, attachments })
+        });
+        const data = await res.json();
+        if (!res.ok || !data?.ok) throw new Error(data?.error || '发送失败');
+
+        formStatus.textContent = '发送成功，等待回答...';
+        textarea.value = '';
+        fileInput.value = '';
+        refreshHistory();
+      } catch (err) {
+        formStatus.textContent = err.message || '发送失败';
+      } finally {
+        submitBtn.disabled = false;
+      }
+    }
+
+    function renderHistory(questions, answers) {
+      const answerMap = new Map(answers.map(a => [String(a.questionId), a]));
+      historyEl.innerHTML = questions
+        .slice()
+        .reverse()
+        .map(q => {
+          const ans = answerMap.get(String(q.id));
+          const attachmentsHTML = (q.attachments || [])
+            .map(att => `<a class="chip" href="${att.url}" target="_blank" rel="noopener">${att.filename || att.url}</a>`)
+            .join('');
+          return `
+            <article class="card">
+              <h3>#${q.id}</h3>
+              <div class="meta">提问时间：${new Date(q.ts).toLocaleString()}</div>
+              <pre>${q.text}</pre>
+              ${attachmentsHTML ? `<div class="attachments">${attachmentsHTML}</div>` : ''}
+              ${ans ? `
+                <hr style="margin:12px 0;border:0;border-top:1px solid #1f2937" />
+                <div class="meta">答案时间：${new Date(ans.ts).toLocaleString()}</div>
+                <pre>${ans.answer}</pre>
+              ` : '<div class="meta">尚未收到答案</div>'}
+            </article>
+          `;
+        })
+        .join('');
+    }
+
+    async function refreshHistory() {
+      try {
+        statusEl.textContent = '同步中...';
+        const [questionsRes, answersRes] = await Promise.all([
+          fetch(QUESTIONS_LIST_URL),
+          fetch(ANSWERS_LIST_URL)
+        ]);
+        const questionsData = await questionsRes.json();
+        const answersData = await answersRes.json();
+        renderHistory(questionsData.items || [], answersData.items || []);
+        statusEl.textContent = `最近更新：${new Date().toLocaleTimeString()}`;
+      } catch (err) {
+        statusEl.textContent = '同步失败：' + (err.message || err);
+      }
+    }
+
+    form.addEventListener('submit', submitQuestion);
+    refreshHistory();
+    setInterval(refreshHistory, 4000);
+  </script>
+</body>
+</html>

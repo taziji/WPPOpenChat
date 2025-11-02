@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>WS Local Bridge → WPP</title>
+<style>
+  body{font:14px/1.4 system-ui, sans-serif; padding:16px}
+  #status{margin:8px 0; font-family:monospace}
+  button{padding:6px 10px}
+  input,textarea{width:100%; max-width:580px}
+</style>
+
+<h3>Local WS Bridge → WPP</h3>
+<p>1) Click “Open WPP Tab” (or switch to an existing one).<br>
+2) This page connects to <code>wss://127.0.0.1:7071</code> and forwards messages to the WPP tab via <code>postMessage</code>.</p>
+
+<p>
+  WPP URL:
+  <input id="wppUrl" value="https://wpp.os.wpp.com/application/eac6b903-18a6-457a-b7bf-b4711af0d9c3/creative-studio/chat">
+</p>
+<p>
+  <button id="open">Open WPP Tab</button>
+  <button id="ping">Send test → “fill: hello from bridge”</button>
+</p>
+
+<pre id="status">[bridge] idle</pre>
+
+<script>
+const statusEl = document.getElementById('status');
+const log = (...a)=>{ console.log('[bridge]',...a); statusEl.textContent = a.map(x=>typeof x==='string'?x:JSON.stringify(x)).join(' '); };
+
+const wppUrlInput = document.getElementById('wppUrl');
+let child = null;
+
+// Open (or re-open) WPP tab and keep a window handle
+document.getElementById('open').onclick = () => {
+  const url = wppUrlInput.value.trim();
+  child = window.open(url, 'wpp_tab'); // give it a name so future calls reuse it
+  log('opened/attached to WPP tab:', url);
+};
+
+// Manual test: send a message (without WS)
+document.getElementById('ping').onclick = () => {
+  if (!child || child.closed) { log('No WPP tab handle; click “Open WPP Tab” first.'); return; }
+  child.postMessage({ type:'fill', text:'hello from bridge' }, '*');
+  log('posted test message to WPP tab');
+};
+
+// === WebSocket → postMessage ===
+let ws;
+function connectWS() {
+  try { if (ws) ws.close(); } catch {}
+  log('connecting ws → wss://127.0.0.1:7071');
+  try {
+    ws = new WebSocket('wss://127.0.0.1:7071');
+  } catch (err) {
+    log('ws ctor error', err);
+    setTimeout(connectWS, 3000);
+    return;
+  }
+
+  ws.onopen = () => { log('ws connected'); try{ ws.send(JSON.stringify({type:'hello', where:'bridge'})); }catch{} };
+
+  ws.onmessage = (e) => {
+    let msg; try { msg = JSON.parse(e.data); } catch { return; }
+    if (!child || child.closed) { log('have WS msg but no WPP tab; click “Open WPP Tab”.'); return; }
+    // Forward whatever WS sends (we expect {type:'fill', text:'...'})
+    child.postMessage(msg, '*');
+    log('forwarded WS → WPP', msg);
+  };
+
+  ws.onerror = (e) => { log('ws error', e); };
+  ws.onclose = () => { log('ws closed; reconnecting...'); setTimeout(connectWS, 3000); };
+}
+
+connectWS();
+</script>

@@ -28,6 +28,13 @@
       margin: 0;
       font-size: 20px;
     }
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 8px;
+    }
     main {
       flex: 1;
       display: grid;
@@ -73,7 +80,6 @@
       color: #9ca3af;
     }
     button {
-      align-self: flex-end;
       padding: 10px 18px;
       border-radius: 12px;
       background: #2563eb;
@@ -89,6 +95,17 @@
     }
     button:not(:disabled):hover {
       background: #1d4ed8;
+    }
+    form button {
+      align-self: flex-end;
+    }
+    .button-secondary {
+      background: rgba(239, 68, 68, 0.2);
+      border: 1px solid rgba(239, 68, 68, 0.6);
+      color: #fca5a5;
+    }
+    .button-secondary:not(:disabled):hover {
+      background: rgba(239, 68, 68, 0.3);
     }
     .status {
       font-size: 13px;
@@ -140,7 +157,10 @@
 </head>
 <body>
   <header>
-    <h1>WPP Chat 控制台</h1>
+    <div class="header-top">
+      <h1>WPP Chat 控制台</h1>
+      <button id="reset-btn" type="button" class="button-secondary">重置会话</button>
+    </div>
     <div class="status" id="status">准备就绪</div>
   </header>
   <main>
@@ -171,12 +191,14 @@
     const formStatus = document.getElementById('form-status');
     const historyEl = document.getElementById('history');
     const statusEl = document.getElementById('status');
+    const resetBtn = document.getElementById('reset-btn');
 
     const API_BASE = location.origin;
     const QUESTION_URL = `${API_BASE}/v1/questions`;
     const ATTACH_UPLOAD_URL = `${API_BASE}/v1/attachments/upload`;
     const QUESTIONS_LIST_URL = `${API_BASE}/admin/questions`;
     const ANSWERS_LIST_URL = `${API_BASE}/admin/answers`;
+    const RESET_URL = `${API_BASE}/admin/reset`;
 
     async function uploadAttachments(files) {
       if (!files || !files.length) return [];
@@ -273,6 +295,30 @@
     }
 
     form.addEventListener('submit', submitQuestion);
+    resetBtn.addEventListener('click', async () => {
+      if (!confirm('确认要清空所有提问、答案和附件吗？')) {
+        return;
+      }
+      const originalText = resetBtn.textContent;
+      resetBtn.disabled = true;
+      resetBtn.textContent = '重置中...';
+      statusEl.textContent = '正在重置会话...';
+      try {
+        const res = await fetch(RESET_URL, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || '重置失败');
+        }
+        formStatus.textContent = '';
+        statusEl.textContent = '所有对话已重置';
+        refreshHistory();
+      } catch (err) {
+        statusEl.textContent = '重置失败：' + (err.message || err);
+      } finally {
+        resetBtn.disabled = false;
+        resetBtn.textContent = originalText;
+      }
+    });
     refreshHistory();
     setInterval(refreshHistory, 4000);
   </script>

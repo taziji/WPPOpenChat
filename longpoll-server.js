@@ -123,6 +123,15 @@ function deliverPending() {
   }
 }
 
+function cancelWaiters() {
+  if (!waiters.size) return;
+  for (const waiter of Array.from(waiters)) {
+    clearTimeout(waiter.timer);
+    waiters.delete(waiter);
+    waiter.res.status(204).end();
+  }
+}
+
 app.post('/v1/questions', (req, res) => {
   const { text, attachments: rawAttachments } = req.body || {};
   if (!text || typeof text !== 'string') {
@@ -246,6 +255,16 @@ app.get('/admin/answers', (_req, res) => {
 app.get('/admin/attachments', (_req, res) => {
   const list = Array.from(attachments.values()).map(({ buffer, ...rest }) => rest);
   res.json({ items: list });
+});
+
+app.post('/admin/reset', (_req, res) => {
+  questions.length = 0;
+  answers.length = 0;
+  attachments.clear();
+  nextQuestionId = 1;
+  nextAttachmentId = 1;
+  cancelWaiters();
+  res.json({ ok: true });
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
